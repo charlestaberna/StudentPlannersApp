@@ -1,16 +1,62 @@
 /* =====================================================================
-   STUDENT PLANNER — client-side app core
-   Everything the PHP+MySQL backend used to do (auth, tasks, schedule,
-   subjects, notes, calendar, analytics, accounts, messages) is
-   reproduced here using localStorage as the "database". No server or
-   PHP is required — every page in this folder can be opened directly
-   in a browser (or hosted as plain static files) and it will work,
-   with all data kept in the browser it runs in.
+   STUDENT PLANNER — client-side app core (Firebase edition)
+   Same features as before, but the "database" now lives in Firebase
+   Firestore instead of localStorage. That means:
+     - Whatever an admin/faculty adds or edits (subjects, tasks,
+       schedule, notes, events) is immediately visible to every
+       account, on any device/browser, and stays there until it is
+       actually deleted.
+     - Group chat messages persist and are shared by everyone, and
+       survive refresh / going back.
+     - Profile pictures are stored centrally, so they don't disappear
+       on refresh or when switching devices.
+     - Online/offline presence is tracked, but only ever shown to
+       admin accounts.
+   Every page (tasks.html, notes.html, etc.) still talks to this file
+   through the same SP.* API as before — only this file changed.
    ===================================================================== */
 
 const SP = (() => {
-  const LS_KEY = 'sp_db_v1';
   const SESSION_KEY = 'sp_session_user_id';
+  const MAIN_COL = 'planner';
+  const MAIN_DOC = 'main';
+  const ONLINE_WINDOW_MS = 2 * 60 * 1000; // considered "online" if seen in last 2 min
+
+  let cachedDb = null;
+  let firestoreDb = null;
+  let authReadyPromise = null;
+
+  // ---------------------------------------------------------------
+  // Firebase bootstrap
+  // ---------------------------------------------------------------
+  function ensureFirebaseApp() {
+    if (!window.firebase) {
+      throw new Error('Firebase SDK not loaded. Make sure the firebase-*-compat.js scripts and firebase-config.js are included before app.js.');
+    }
+    if (!firebase.apps.length) {
+      firebase.initializeApp(window.SP_FIREBASE_CONFIG);
+    }
+    if (!firestoreDb) firestoreDb = firebase.firestore();
+    return firestoreDb;
+  }
+
+  function ensureAuth() {
+    if (!authReadyPromise) {
+      ensureFirebaseApp();
+      authReadyPromise = new Promise((resolve) => {
+        firebase.auth().onAuthStateChanged(user => {
+          if (user) { resolve(user); }
+          else { firebase.auth().signInAnonymously().catch(err => console.error('Anon sign-in failed', err)); }
+        });
+      });
+    }
+    return authReadyPromise;
+  }
+
+  function mainRef() {
+    ensureFirebaseApp();
+    return firestoreDb.collection(MAIN_COL).doc(MAIN_DOC);
+  }
 
   // ---------------------------------------------------------------
   // Seed data (mirrors student_planner.sql sample rows)
@@ -55,64 +101,179 @@ const SP = (() => {
   function todayStr(){ return new Date().toISOString().slice(0,10); }
   function addDays(n){ const d = new Date(); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); }
 
-  function load() {
-    let raw = localStorage.getItem(LS_KEY);
-    if (!raw) {
+  // ---------------------------------------------------------------
+  // Database load/save — now backed by a single shared Firestore doc
+  // ---------------------------------------------------------------
+  async function load(force) {
+    if (cachedDb && !force) return cachedDb;
+    await ensureAuth();
+    const ref = mainRef();
+    const snap = await ref.get();
+    if (!snap.exists) {
       const seeded = seedDb();
-      localStorage.setItem(LS_KEY, JSON.stringify(seeded));
-      return seeded;
+      await ref.set(seeded);
+      cachedDb = seeded;
+    } else {
+      cachedDb = snap.data();
+      ['users','subjects','tasks','schedule','notes','events','groups','messages'].forEach(k => { if (!Array.isArray(cachedDb[k])) cachedDb[k] = []; });
+      if (!cachedDb.nextId) cachedDb.nextId = seedDb().nextId;
     }
-    try { return JSON.parse(raw); } catch(e){ const s = seedDb(); localStorage.setItem(LS_KEY, JSON.stringify(s)); return s; }
+    return cachedDb;
   }
-  function save(db) { localStorage.setItem(LS_KEY, JSON.stringify(db)); }
+
+  async function save(db) {
+    cachedDb = db;
+    await ensureAuth();
+    try {
+      await mainRef().set(db);
+    } catch (e) {
+      console.error('Save to Firestore failed:', e);
+      toast('Could not save to the cloud. Check your internet connection.', 'err');
+    }
+  }
+
+  // Push a single chat message with less risk of clobbering another
+  // user's message sent at nearly the same time.
+  async function pushMessage(msg) {
+    await ensureAuth();
+    try {
+      await mainRef().update({ messages: firebase.firestore.FieldValue.arrayUnion(msg) });
+    } catch (e) {
+      console.error('Send message failed:', e);
+      toast('Message failed to send. Check your internet connection.', 'err');
+      return false;
+    }
+    if (cachedDb) cachedDb.messages.push(msg);
+    return true;
+  }
+
+  // Re-fetch just the current messages array from the cloud (used for
+  // light polling in messages.html so chats don't feel stuck).
+  async function refreshMessages() {
+    await ensureAuth();
+    const snap = await mainRef().get();
+    const data = snap.exists ? snap.data() : { messages: [] };
+    const msgs = Array.isArray(data.messages) ? data.messages : [];
+    if (cachedDb) cachedDb.messages = msgs;
+    return msgs;
+  }
+
   function nextId(db, table) { const id = db.nextId[table]++; return id; }
 
-  function resetAll() { localStorage.removeItem(LS_KEY); localStorage.removeItem(SESSION_KEY); location.href = 'login.html'; }
+  function resetAll() {
+    localStorage.removeItem(SESSION_KEY);
+    location.href = 'login.html';
+  }
 
   // ---------------------------------------------------------------
-  // Auth
+  // Auth (custom username/password, stored inside the shared doc)
   // ---------------------------------------------------------------
-  function currentUser() {
-    const db = load();
+  function currentUserSync() {
+    if (!cachedDb) return null;
     const id = parseInt(localStorage.getItem(SESSION_KEY) || '0', 10);
-    return db.users.find(u => u.id === id) || null;
+    return cachedDb.users.find(u => u.id === id) || null;
   }
-  function login(username, password) {
-    const db = load();
+  async function currentUser() {
+    await load();
+    return currentUserSync();
+  }
+
+  async function login(username, password) {
+    const db = await load(true);
     const u = db.users.find(u => u.username.toLowerCase() === username.trim().toLowerCase());
     if (!u) return { ok:false, msg:'No account found with that username.' };
     if (u.password !== password) return { ok:false, msg:'Incorrect password.' };
-    if (!u.is_approved) return { ok:false, msg:'Your account is awaiting admin approval.' };
+    if (!u.is_approved) return { ok:false, msg: u.role === 'admin' ? 'Your admin request is still awaiting approval from an existing admin.' : 'Your account is awaiting admin approval.' };
     u.last_seen = new Date().toISOString();
-    save(db);
+    await save(db);
     localStorage.setItem(SESSION_KEY, String(u.id));
     return { ok:true };
   }
-  function logout() { localStorage.removeItem(SESSION_KEY); location.href = 'login.html'; }
-  function register({ name, username, password, role }) {
-    const db = load();
+
+  function logout() {
+    localStorage.removeItem(SESSION_KEY);
+    location.href = 'login.html';
+  }
+
+  async function register({ name, username, password, role }) {
+    const db = await load(true);
     if (db.users.some(u => u.username.toLowerCase() === username.trim().toLowerCase())) {
       return { ok:false, msg:'That username is already taken.' };
     }
     const isFirst = db.users.length === 0;
+    const requestedRole = role || 'student';
     const id = nextId(db, 'users');
     const user = {
       id, name: name.trim(), username: username.trim(), password,
-      role: isFirst ? 'admin' : (role || 'student'),
+      // The very first account ever created becomes the true admin automatically.
+      // Anyone else — including someone requesting the "admin" role — is created
+      // unapproved and needs an existing real admin to approve them from
+      // Manage Accounts before they can sign in.
+      role: isFirst ? 'admin' : requestedRole,
       is_approved: isFirst ? 1 : 0,
       theme_color: '#1a6cf5', avatar: null,
       created_at: new Date().toISOString(), last_seen: new Date().toISOString()
     };
     db.users.push(user);
-    save(db);
-    return { ok:true, autoApproved: isFirst };
+    await save(db);
+    return { ok:true, autoApproved: isFirst, role: user.role };
   }
-  function requireAuth() {
-    const u = currentUser();
+
+  async function requireAuth() {
+    await load();
+    const u = currentUserSync();
     if (!u) { location.href = 'login.html'; return null; }
+    u.last_seen = new Date().toISOString();
+    save(cachedDb); // fire-and-forget heartbeat, don't block rendering
     return u;
   }
+
   function canManage(user) { return user && (user.role === 'admin' || user.role === 'faculty'); }
+
+  function isOnline(user) {
+    if (!user || !user.last_seen) return false;
+    return (Date.now() - new Date(user.last_seen).getTime()) < ONLINE_WINDOW_MS;
+  }
+  function canSeePresence(viewer) { return !!viewer && viewer.role === 'admin'; }
+
+  function startPresencePing(userId) {
+    if (window.__spPingInterval) return;
+    window.__spPingInterval = setInterval(async () => {
+      try {
+        const db = await load(true);
+        const me = db.users.find(x => x.id === userId);
+        if (me) { me.last_seen = new Date().toISOString(); await save(db); }
+      } catch (e) { /* offline — ignore */ }
+    }, 30000);
+  }
+
+  // ---------------------------------------------------------------
+  // Image helper — resize/compress before storing, since everything
+  // now lives inside one shared Firestore document (1MB doc limit).
+  // ---------------------------------------------------------------
+  function resizeImageFile(file, maxDim = 480, quality = 0.72) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Could not read file'));
+      reader.onload = () => {
+        const img = new Image();
+        img.onerror = () => reject(new Error('Could not read image'));
+        img.onload = () => {
+          let { width, height } = img;
+          if (width > maxDim || height > maxDim) {
+            if (width >= height) { height = Math.round(height * (maxDim/width)); width = maxDim; }
+            else { width = Math.round(width * (maxDim/height)); height = maxDim; }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width; canvas.height = height;
+          canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
 
   // ---------------------------------------------------------------
   // Generic helpers
@@ -158,7 +319,7 @@ const SP = (() => {
   }
 
   // ---------------------------------------------------------------
-  // Layout shell (sidebar + topbar) — mirrors core/layout_head.php & layout_foot.php
+  // Layout shell (sidebar + topbar)
   // ---------------------------------------------------------------
   const NAV = [
     { key:'dashboard', href:'index.html', label:'Dashboard', icon:'<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>' },
@@ -238,18 +399,37 @@ const SP = (() => {
   function closeModal(id){ document.getElementById(id).classList.remove('show'); }
   document.addEventListener('keydown', e => { if (e.key === 'Escape') document.querySelectorAll('.modal-bg.show').forEach(m => m.classList.remove('show')); });
 
-  function initPage(opts, renderFn) {
-    const user = requireAuth();
+  async function initPage(opts, renderFn) {
+    const loadingEl = document.createElement('div');
+    loadingEl.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#04102b;color:#cfe0ff;font-family:Sora,sans-serif;z-index:9999;text-align:center;padding:30px';
+    loadingEl.textContent = 'Loading…';
+    document.body.appendChild(loadingEl);
+
+    let user;
+    try {
+      user = await requireAuth();
+    } catch (e) {
+      console.error(e);
+      loadingEl.textContent = 'Could not connect to the cloud database. Check assets/js/firebase-config.js and your internet connection.';
+      return;
+    }
     if (!user) return;
+    loadingEl.remove();
+
     if (opts.adminOnly && user.role !== 'admin') { document.body.innerHTML = '<div style="padding:40px;color:#fff;font-family:sans-serif">Admins only.</div>'; return; }
     renderShell({ activeNav: opts.activeNav, title: opts.title, sub: opts.sub, user });
     const content = document.getElementById('content');
-    renderFn(content, { user, db: load(), save, nextId, canManage: canManage(user) });
+    startPresencePing(user.id);
+    renderFn(content, {
+      user, db: cachedDb, save, nextId, canManage: canManage(user),
+      pushMessage, refreshMessages, isOnline, canSeePresence: canSeePresence(user),
+      resizeImageFile
+    });
   }
 
   return {
-    load, save, nextId, resetAll,
-    currentUser, login, logout, register, requireAuth, canManage,
+    load, save, nextId, resetAll, pushMessage, refreshMessages, resizeImageFile,
+    currentUser, login, logout, register, requireAuth, canManage, isOnline, canSeePresence,
     h, initials, avatarHtml, fmtDate, fmtTime, toast,
     renderShell, toggleSidebar, openModal, closeModal, initPage,
     todayStr, addDays
