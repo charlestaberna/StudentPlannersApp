@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calendar — Student Planner</title>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+<style>
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
+.cal-dow{font-size:10.5px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);text-align:center;padding-bottom:6px}
+.cal-cell{min-height:92px;border-radius:12px;border:1px solid var(--border);background:rgba(255,255,255,.02);padding:8px;position:relative}
+.cal-cell.other{opacity:.35}
+.cal-cell.today{border-color:rgba(60,130,255,.6);box-shadow:0 0 0 1px rgba(60,130,255,.3) inset}
+.cal-daynum{font-size:12px;font-weight:700;margin-bottom:6px}
+.cal-item{font-size:10px;padding:2px 6px;border-radius:6px;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:default}
+@media(max-width:800px){.cal-grid{grid-template-columns:repeat(7,minmax(60px,1fr));overflow-x:auto}.cal-cell{min-height:70px}}
+</style>
+</head>
+<body>
+<script src="assets/js/app.js"></script>
+<script>
+SP.initPage({ activeNav:'calendar', title:'Calendar', sub:'Exams, deadlines and other events.' }, (root, ctx) => {
+  const { db, save, canManage } = ctx;
+  let view = new Date(); view.setDate(1);
+  const TYPE_COLOR = { exam:'type-exam', deadline:'type-deadline', holiday:'type-holiday', activity:'type-activity', other:'type-other' };
+
+  function openForm() {
+    document.body.insertAdjacentHTML('beforeend', `
+    <div class="modal-bg show" id="evModal">
+      <div class="modal">
+        <div class="modal-head"><div class="modal-title">Add Event</div><button class="modal-close" onclick="document.getElementById('evModal').remove()">✕</button></div>
+        <form id="evForm">
+          <div class="form-row"><div><label>Title</label><input type="text" id="fTitle" required></div></div>
+          <div class="form-row cols-2">
+            <div><label>Date</label><input type="date" id="fDate" required></div>
+            <div><label>Type</label><select id="fType">${Object.keys(TYPE_COLOR).map(t=>`<option value="${t}">${t}</option>`).join('')}</select></div>
+          </div>
+          <div class="form-row"><div><label>Description</label><textarea id="fDesc"></textarea></div></div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-ghost" onclick="document.getElementById('evModal').remove()">Cancel</button>
+            <button type="submit" class="btn btn-primary">Add Event</button>
+          </div>
+        </form>
+      </div>
+    </div>`);
+    document.getElementById('evForm').addEventListener('submit', e => {
+      e.preventDefault();
+      const title = document.getElementById('fTitle').value.trim();
+      const date = document.getElementById('fDate').value;
+      if (!title || !date) return;
+      db.events.push({ id: ctx.nextId(db,'events'), user_id: ctx.user.id, title, event_date: date, event_type: document.getElementById('fType').value, description: document.getElementById('fDesc').value.trim() });
+      save(db); document.getElementById('evModal').remove(); SP.toast('Event added.'); render();
+    });
+  }
+
+  function render() {
+    const year = view.getFullYear(), month = view.getMonth();
+    const first = new Date(year, month, 1);
+    const startOffset = first.getDay();
+    const daysInMonth = new Date(year, month+1, 0).getDate();
+    const cells = [];
+    for (let i=0;i<startOffset;i++) cells.push(null);
+    for (let d=1;d<=daysInMonth;d++) cells.push(d);
+    while (cells.length % 7 !== 0) cells.push(null);
+    const todayStr = SP.todayStr();
+    const monthLabel = view.toLocaleDateString('en-US',{month:'long',year:'numeric'});
+
+    function itemsFor(dateStr) {
+      const evs = db.events.filter(e=>e.event_date===dateStr).map(e=>({label:e.title, cls:TYPE_COLOR[e.event_type]||'type-other'}));
+      const tasks = db.tasks.filter(t=>t.due_date===dateStr && t.status!=='completed').map(t=>({label:'📝 '+t.title, cls:'pri-'+t.priority}));
+      return evs.concat(tasks);
+    }
+
+    root.innerHTML = `
+      <div class="section-head">
+        <div><div class="section-eyebrow">Month View</div><div class="section-title">${monthLabel}</div></div>
+        <div class="flex gap-8">
+          <button class="btn btn-outline btn-sm" id="prevBtn">← Prev</button>
+          <button class="btn btn-outline btn-sm" id="todayBtn">Today</button>
+          <button class="btn btn-outline btn-sm" id="nextBtn">Next →</button>
+          ${canManage ? `<button class="btn btn-primary" id="addBtn">+ Add Event</button>` : ''}
+        </div>
+      </div>
+      <div class="card card-pad">
+        <div class="cal-grid" style="margin-bottom:8px">
+          ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<div class="cal-dow">${d}</div>`).join('')}
+        </div>
+        <div class="cal-grid">
+          ${cells.map(d => {
+            if (!d) return `<div class="cal-cell other"></div>`;
+            const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+            const items = itemsFor(dateStr);
+            return `<div class="cal-cell ${dateStr===todayStr?'today':''}">
+              <div class="cal-daynum">${d}</div>
+              ${items.slice(0,3).map(it => `<div class="cal-item badge ${it.cls}" style="display:block">${SP.h(it.label)}</div>`).join('')}
+              ${items.length>3 ? `<div style="font-size:9.5px;color:var(--muted2)">+${items.length-3} more</div>` : ''}
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+      <div class="section-eyebrow" style="margin-top:26px">Upcoming Events</div>
+      <div class="card" style="margin-top:10px">
+        <div class="table-wrap">
+        ${db.events.filter(e=>e.event_date>=todayStr).length===0 ? `<div class="empty-state"><div class="empty-title">No upcoming events</div></div>` : `
+        <table><thead><tr><th>Title</th><th>Type</th><th>Date</th><th>Description</th>${canManage?'<th></th>':''}</tr></thead>
+        <tbody>
+        ${db.events.filter(e=>e.event_date>=todayStr).sort((a,b)=>a.event_date.localeCompare(b.event_date)).map(e => `
+          <tr>
+            <td style="font-weight:600">${SP.h(e.title)}</td>
+            <td><span class="badge ${TYPE_COLOR[e.event_type]||'type-other'}">${e.event_type}</span></td>
+            <td>${SP.fmtDate(e.event_date)}</td>
+            <td style="color:var(--muted);font-size:12.5px">${SP.h(e.description||'')}</td>
+            ${canManage ? `<td><button class="btn btn-danger btn-sm" data-del="${e.id}">Delete</button></td>` : ''}
+          </tr>`).join('')}
+        </tbody></table>`}
+        </div>
+      </div>`;
+
+    document.getElementById('prevBtn').addEventListener('click', () => { view.setMonth(view.getMonth()-1); render(); });
+    document.getElementById('nextBtn').addEventListener('click', () => { view.setMonth(view.getMonth()+1); render(); });
+    document.getElementById('todayBtn').addEventListener('click', () => { view = new Date(); view.setDate(1); render(); });
+    if (canManage) {
+      document.getElementById('addBtn').addEventListener('click', openForm);
+      root.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => {
+        if (!confirm('Delete this event?')) return;
+        db.events = db.events.filter(e=>e.id!==parseInt(b.dataset.del,10));
+        save(db); SP.toast('Event deleted.'); render();
+      }));
+    }
+  }
+  render();
+});
+</script>
+</body>
+</html>
