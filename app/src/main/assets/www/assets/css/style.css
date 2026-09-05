@@ -3,11 +3,6 @@
    Dark navy / glow-blue / gold glass theme (matches the login screen)
    ===================================================================== */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-/* Touch-friendly defaults for the Android WebView build: removes the
-   grey flash on tap and the ~300ms tap delay so buttons/links feel
-   instantly responsive to a finger instead of a mouse. */
-html{-webkit-tap-highlight-color:transparent}
-a,button,.sb-link,.hamburger,.sb-logout,[onclick]{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 :root{
   --night:#060d1f;
   --night2:#0a1330;
@@ -49,7 +44,7 @@ a{color:inherit}
 .sb-brand-name{font-size:16.5px;font-weight:700;letter-spacing:-.2px;line-height:1.15}
 .sb-brand-sub{font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:1px}
 .sb-nav{display:flex;flex-direction:column;gap:3px;flex:1}
-.sb-link{display:flex;align-items:center;gap:12px;padding:13px 13px;border-radius:11px;font-size:13.5px;min-height:44px;
+.sb-link{display:flex;align-items:center;gap:12px;padding:10px 13px;border-radius:11px;font-size:13.5px;
   font-weight:500;color:var(--muted);text-decoration:none;transition:all .18s;border:1px solid transparent}
 .sb-link svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
 .sb-link:hover{background:rgba(26,108,245,.08);color:var(--white)}
