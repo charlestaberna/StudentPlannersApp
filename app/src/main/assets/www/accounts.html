@@ -7,10 +7,14 @@
 <link rel="stylesheet" href="assets/css/style.css">
 </head>
 <body>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="assets/js/firebase-config.js"></script>
 <script src="assets/js/app.js"></script>
 <script>
 SP.initPage({ activeNav:'accounts', title:'Manage Accounts', sub:'Approve sign-ups, change roles, and manage every account.', adminOnly:true }, (root, ctx) => {
-  const { db, save, user: me } = ctx;
+  const { db, save, user: me, isOnline } = ctx;
 
   function render() {
     const list = db.users.slice().sort((a,b) => (a.is_approved - b.is_approved) || a.name.localeCompare(b.name));
@@ -21,7 +25,7 @@ SP.initPage({ activeNav:'accounts', title:'Manage Accounts', sub:'Approve sign-u
       <div class="card">
         <div class="table-wrap">
         <table>
-          <thead><tr><th>User</th><th>Username</th><th>Role</th><th>Status</th><th>Joined</th><th></th></tr></thead>
+          <thead><tr><th>User</th><th>Username</th><th>Role</th><th>Status</th><th>Presence</th><th>Joined</th><th></th></tr></thead>
           <tbody>
           ${list.map(u => `
             <tr>
@@ -34,6 +38,7 @@ SP.initPage({ activeNav:'accounts', title:'Manage Accounts', sub:'Approve sign-u
                 </select>`}
               </td>
               <td>${u.is_approved ? '<span class="badge st-completed">Approved</span>' : '<span class="badge st-pending">Pending</span>'}</td>
+              <td>${isOnline(u) ? '<span class="badge st-completed">🟢 Online</span>' : '<span class="badge st-pending">⚪ Offline</span>'}</td>
               <td style="color:var(--muted);font-size:12px">${SP.fmtDate(u.created_at)}</td>
               <td>
                 <div class="flex gap-8">
