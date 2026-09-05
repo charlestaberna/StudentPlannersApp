@@ -157,13 +157,17 @@ body.dark-mode{
         <input type="password" id="password" placeholder="Choose a password" required>
       </div>
       <div class="field">
+        <label>Confirm Password</label>
+        <input type="password" id="confirmPassword" placeholder="Re-enter your password" required>
+      </div>
+      <div class="field">
         <label>I am a...</label>
         <select id="role">
           <option value="student">Student</option>
           <option value="faculty">Faculty</option>
           <option value="admin">Admin</option>
         </select>
-        <div class="hint" id="roleHint">The very first account ever registered on this device is auto-approved as admin. Everyone else needs approval from an admin before they can sign in.</div>
+        <div class="hint" id="roleHint">Student and Faculty accounts can sign in right away — no approval needed. The very first account ever registered on this device is auto-approved as admin.</div>
       </div>
       <button class="btn" type="submit">
         Create Account
@@ -184,9 +188,14 @@ document.getElementById('regForm').addEventListener('submit', function(e){
   const name = document.getElementById('name').value.trim();
   const username = document.getElementById('username').value.trim();
   const password = document.getElementById('password').value.trim();
+  const confirmPassword = document.getElementById('confirmPassword').value.trim();
   const role = document.getElementById('role').value;
-  if (!name || !username || !password) {
+  if (!name || !username || !password || !confirmPassword) {
     alertBox.innerHTML = '<div class="alert"><div class="alert-dot">!</div><span>Please fill in all fields.</span></div>';
+    return;
+  }
+  if (password !== confirmPassword) {
+    alertBox.innerHTML = '<div class="alert"><div class="alert-dot">!</div><span>Passwords do not match.</span></div>';
     return;
   }
   const res = SP.register({ name, username, password, role });
@@ -195,7 +204,7 @@ document.getElementById('regForm').addEventListener('submit', function(e){
     return;
   }
   let url = 'login.html?registered=1';
-  if (!res.autoApproved) url += '&pending=1' + (role === 'admin' ? '&role=admin' : '');
+  if (!res.autoApproved) url += '&pending=1' + (res.pendingAdmin ? '&role=admin' : '');
   location.href = url;
 });
 
@@ -206,7 +215,7 @@ function updateRoleHint() {
   if (roleSelect.value === 'admin') {
     roleHint.textContent = 'Registering as Admin requires approval from an existing, already-approved admin before you can sign in — this keeps admin access under real admin control.';
   } else {
-    roleHint.textContent = 'The very first account ever registered on this device is auto-approved as admin. Everyone else needs approval from an admin before they can sign in.';
+    roleHint.textContent = 'Student and Faculty accounts can sign in right away — no approval needed. The very first account ever registered on this device is auto-approved as admin.';
   }
 }
 roleSelect.addEventListener('change', updateRoleHint);
