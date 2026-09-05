@@ -8,5 +8,5 @@
         https://yoursubdomain.epizy.com/login.php   (InfinityFree)
         http://192.168.1.10/student_planner/login.php  (local XAMPP over WiFi, for testing)
     -->
-    <string name="app_url">https://black35.infinityfreeapp.com/login.php</string>
+    <string name="app_url">https://student-planners-peach.vercel.app/login.html</string>
 </resources>
