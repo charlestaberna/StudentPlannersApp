@@ -25,6 +25,17 @@ const SP = (() => {
     if (e.persisted) location.reload();
   });
 
+  // Lets a page react when ANOTHER browser tab/window (e.g. a different
+  // logged-in account open side-by-side on the same device) saves new
+  // data — this is what makes chat feel "live" between two people without
+  // any backend: the `storage` event only fires in tabs that did NOT make
+  // the change, which is exactly what we want here.
+  function onDbChange(cb) {
+    window.addEventListener('storage', function (e) {
+      if (e.key === LS_KEY) cb();
+    });
+  }
+
   // ---------------------------------------------------------------
   // Seed data (mirrors student_planner.sql sample rows)
   // ---------------------------------------------------------------
@@ -109,16 +120,20 @@ const SP = (() => {
     }
     const isFirst = db.users.length === 0;
     const id = nextId(db, 'users');
+    const finalRole = isFirst ? 'admin' : (role || 'student');
+    // Only registering as Admin needs approval from an existing true admin now.
+    // Student and Faculty accounts are approved immediately.
+    const needsApproval = !isFirst && finalRole === 'admin';
     const user = {
       id, name: name.trim(), username: username.trim(), password,
-      role: isFirst ? 'admin' : (role || 'student'),
-      is_approved: isFirst ? 1 : 0,
+      role: finalRole,
+      is_approved: needsApproval ? 0 : 1,
       theme_color: '#1a6cf5', avatar: null,
       created_at: new Date().toISOString(), last_seen: new Date().toISOString()
     };
     db.users.push(user);
     save(db);
-    return { ok:true, autoApproved: isFirst };
+    return { ok:true, autoApproved: !needsApproval, pendingAdmin: needsApproval };
   }
   function requireAuth() {
     const u = currentUser();
@@ -295,7 +310,7 @@ const SP = (() => {
   return {
     load, save, nextId, resetAll,
     currentUser, login, logout, register, requireAuth, canManage, isTrueAdmin,
-    isOnline, touchLastSeen,
+    isOnline, touchLastSeen, onDbChange,
     h, initials, avatarHtml, fmtDate, fmtTime, toast,
     renderShell, toggleSidebar, openModal, closeModal, initPage,
     todayStr, addDays
