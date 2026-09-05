@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard — Student Planner</title>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<script src="assets/js/app.js"></script>
+<script>
+SP.initPage({ activeNav:'dashboard', title:'Dashboard' }, (root, ctx) => {
+  const { user, db, save, canManage } = ctx;
+  document.querySelector('.tb-sub') ? null : null;
+  document.querySelector('.tb-title').insertAdjacentHTML('afterend',
+    `<div class="tb-sub">Welcome back, ${SP.h(user.name)} — here's ${canManage ? 'the school-wide overview' : "what your admin/faculty set up"}.</div>`);
+
+  function stats() {
+    const tasks = db.tasks;
+    const total = tasks.length;
+    const completed = tasks.filter(t => t.status === 'completed').length;
+    const pending = tasks.filter(t => t.status !== 'completed').length;
+    const overdue = tasks.filter(t => t.status !== 'completed' && t.due_date && t.due_date < SP.todayStr()).length;
+    const completionRate = total > 0 ? Math.round((completed/total)*100) : 0;
+    return { total, completed, pending, overdue, completionRate, subjects: db.subjects.length };
+  }
+
+  function subjectName(id){ const s = db.subjects.find(s => s.id === id); return s ? s.subject_name : ''; }
+  function subjectColor(id){ const s = db.subjects.find(s => s.id === id); return s ? s.color : '#1a6cf5'; }
+
+  function render() {
+    const s = stats();
+    const upcoming = db.tasks
+      .filter(t => t.status !== 'completed')
+      .sort((a,b) => {
+        if (!a.due_date && !b.due_date) return 0;
+        if (!a.due_date) return 1;
+        if (!b.due_date) return -1;
+        if (a.due_date !== b.due_date) return a.due_date < b.due_date ? -1 : 1;
+        const order = { high:0, medium:1, low:2 };
+        return order[a.priority] - order[b.priority];
+      }).slice(0,6);
+
+    const dow = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date().getDay()];
+    const todayClasses = db.schedule.filter(c => c.day_of_week === dow)
+      .sort((a,b) => a.start_time.localeCompare(b.start_time));
+
+    const events = db.events.filter(e => e.event_date >= SP.todayStr())
+      .sort((a,b) => a.event_date.localeCompare(b.event_date)).slice(0,4);
+
+    root.innerHTML = `
+      <div class="stat-grid">
+        <div class="stat-card" style="--c:var(--glow2)">
+          <div class="stat-icon"><svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>
+          <div class="stat-val">${s.pending}</div><div class="stat-label">Pending Tasks</div>
+        </div>
+        <div class="stat-card" style="--c:var(--green)">
+          <div class="stat-icon"><svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
+          <div class="stat-val">${s.completed}</div><div class="stat-label">Completed</div>
+        </div>
+        <div class="stat-card" style="--c:var(--red)">
+          <div class="stat-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+          <div class="stat-val">${s.overdue}</div><div class="stat-label">Overdue</div>
+        </div>
+        <div class="stat-card" style="--c:var(--gold)">
+          <div class="stat-icon"><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>
+          <div class="stat-val">${s.subjects}</div><div class="stat-label">Subjects</div>
+        </div>
+      </div>
+
+      <div class="grid-2" style="margin-bottom:22px">
+        <div class="card card-pad">
+          <div class="section-head">
+            <div><div class="section-eyebrow">Task Progress</div><div class="section-title">Add Tasks</div></div>
+            <span class="pill">${s.completionRate}% done</span>
+          </div>
+          <div class="progress-track" style="margin-bottom:20px"><div class="progress-fill" style="width:${s.completionRate}%"></div></div>
+          ${canManage ? `
+          <form id="quickAddForm" class="flex gap-8" style="margin-bottom:18px">
+            <input type="text" id="qaTitle" placeholder="Quick add a task…" required style="flex:1">
+            <input type="date" id="qaDue" style="width:150px">
+            <button class="btn btn-primary btn-sm" type="submit">Add</button>
+          </form>` : ''}
+          <div id="upcomingList">
+            ${upcoming.length === 0 ? `<div class="empty-state" style="padding:30px 10px"><div class="empty-title">No pending tasks 🎉</div><div class="empty-sub">You're all caught up.</div></div>` :
+              upcoming.map(t => `
+              <div class="flex items-center gap-10" style="padding:11px 0;border-bottom:1px solid rgba(90,120,190,.08)">
+                ${canManage ? `<button class="btn-icon btn-outline" style="width:26px;height:26px;border-radius:50%" title="Mark complete" data-complete="${t.id}"></button>`
+                  : `<div class="btn-icon" style="width:26px;height:26px;border-radius:50%;border:1px solid rgba(90,120,190,.2)"></div>`}
+                <div style="flex:1;min-width:0">
+                  <div style="font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${SP.h(t.title)}</div>
+                  <div style="font-size:11px;color:var(--muted);margin-top:2px">
+                    ${t.subject_id ? SP.h(subjectName(t.subject_id)) + ' · ' : ''}${t.due_date ? 'Due ' + SP.fmtDate(t.due_date,{month:'short',day:'numeric'}) : 'No due date'}
+                  </div>
+                </div>
+                <span class="badge pri-${t.priority}">${t.priority}</span>
+              </div>`).join('')}
+          </div>
+          <div style="margin-top:14px;text-align:right"><a href="tasks.html" class="btn btn-ghost btn-sm">View all tasks →</a></div>
+        </div>
+
+        <div class="card card-pad">
+          <div class="section-head"><div><div class="section-eyebrow">Today · ${new Date().toLocaleDateString('en-US',{weekday:'long'})}</div><div class="section-title">Class Schedule</div></div></div>
+          ${todayClasses.length === 0 ? `<div class="empty-state" style="padding:30px 10px"><div class="empty-title">No classes today</div><div class="empty-sub">Enjoy the free time!</div></div>` :
+            todayClasses.map(c => `
+            <div class="flex items-center gap-10" style="padding:11px 0;border-bottom:1px solid rgba(90,120,190,.08)">
+              <span class="chip" style="background:${subjectColor(c.subject_id)}"></span>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:13.5px;font-weight:600">${SP.h(subjectName(c.subject_id))}</div>
+                <div style="font-size:11px;color:var(--muted);margin-top:2px">${SP.h(c.room || 'No room set')}</div>
+              </div>
+              <div style="font-size:11.5px;color:var(--glow2);font-weight:600">${SP.fmtTime(c.start_time)} – ${SP.fmtTime(c.end_time)}</div>
+            </div>`).join('')}
+          <div class="section-eyebrow" style="margin-top:22px">Coming Up</div>
+          ${events.length === 0 ? `<div style="font-size:12.5px;color:var(--muted2);padding:8px 0">No upcoming events.</div>` :
+            events.map(e => `
+            <div class="flex items-center gap-10" style="padding:9px 0">
+              <span class="badge type-${e.event_type}">${e.event_type}</span>
+              <div style="flex:1;font-size:13px">${SP.h(e.title)}</div>
+              <div style="font-size:11px;color:var(--muted)">${SP.fmtDate(e.event_date,{month:'short',day:'numeric'})}</div>
+            </div>`).join('')}
+          <div style="margin-top:14px;text-align:right"><a href="schedule.html" class="btn btn-ghost btn-sm">View schedule →</a></div>
+        </div>
+      </div>
+    `;
+
+    if (canManage) {
+      document.getElementById('quickAddForm').addEventListener('submit', e => {
+        e.preventDefault();
+        const title = document.getElementById('qaTitle').value.trim();
+        const due = document.getElementById('qaDue').value || null;
+        if (!title) return;
+        const id = ctx.nextId(db, 'tasks');
+        db.tasks.push({ id, user_id: user.id, subject_id: null, title, description:'', due_date: due, priority:'medium', status:'pending', completed_at:null });
+        save(db); SP.toast('Task added.'); render();
+      });
+      root.querySelectorAll('[data-complete]').forEach(btn => btn.addEventListener('click', () => {
+        const id = parseInt(btn.dataset.complete,10);
+        const t = db.tasks.find(t => t.id === id);
+        if (t) { t.status = 'completed'; t.completed_at = new Date().toISOString(); save(db); render(); }
+      }));
+    }
+  }
+  render();
+});
+</script>
+</body>
+</html>
