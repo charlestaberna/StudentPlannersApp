@@ -4,17 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Manage Accounts — Student Planner</title>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/style.css">
 </head>
 <body>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="assets/js/firebase-config.js"></script>
 <script src="assets/js/app.js"></script>
 <script>
 SP.initPage({ activeNav:'accounts', title:'Manage Accounts', sub:'Approve sign-ups, change roles, and manage every account.', adminOnly:true }, (root, ctx) => {
-  const { db, save, user: me, isOnline } = ctx;
+  const { db, save, user: me } = ctx;
 
   function render() {
     const list = db.users.slice().sort((a,b) => (a.is_approved - b.is_approved) || a.name.localeCompare(b.name));
@@ -38,7 +35,11 @@ SP.initPage({ activeNav:'accounts', title:'Manage Accounts', sub:'Approve sign-u
                 </select>`}
               </td>
               <td>${u.is_approved ? '<span class="badge st-completed">Approved</span>' : '<span class="badge st-pending">Pending</span>'}</td>
-              <td>${isOnline(u) ? '<span class="badge st-completed">🟢 Online</span>' : '<span class="badge st-pending">⚪ Offline</span>'}</td>
+              <td>
+                ${SP.isOnline(u)
+                  ? `<span class="flex items-center gap-8"><span style="width:8px;height:8px;border-radius:50%;background:#2ecf7a;display:inline-block;box-shadow:0 0 6px #2ecf7a"></span><span style="font-size:12px;color:var(--muted)">Online</span></span>`
+                  : `<span class="flex items-center gap-8"><span style="width:8px;height:8px;border-radius:50%;background:#6b7a99;display:inline-block"></span><span style="font-size:12px;color:var(--muted2)">Offline</span></span>`}
+              </td>
               <td style="color:var(--muted);font-size:12px">${SP.fmtDate(u.created_at)}</td>
               <td>
                 <div class="flex gap-8">
@@ -72,6 +73,7 @@ SP.initPage({ activeNav:'accounts', title:'Manage Accounts', sub:'Approve sign-u
     }));
   }
   render();
+  setInterval(render, 30000); // keep the Online/Offline column fresh without a manual refresh
 });
 </script>
 </body>
