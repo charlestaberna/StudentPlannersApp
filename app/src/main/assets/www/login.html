@@ -53,11 +53,11 @@ body{
 .card .deco-bubble{position:absolute;border-radius:50%;pointer-events:none;
   background:radial-gradient(circle at 32% 28%, rgba(255,255,255,.8), rgba(255,255,255,.12) 50%, transparent 74%);
   border:1px solid rgba(255,255,255,.5)}
-.brand-icon{width:58px;height:58px;border-radius:17px;margin:0 auto 20px;
+.brand-icon{width:84px;height:84px;border-radius:50%;margin:0 auto 20px;overflow:hidden;
   background:linear-gradient(135deg, rgba(255,255,255,.4), rgba(255,255,255,.06));
   border:1px solid rgba(255,255,255,.55);display:flex;align-items:center;justify-content:center;
   box-shadow:0 12px 28px rgba(2,20,70,.3), inset 0 1px 0 rgba(255,255,255,.5);position:relative;z-index:2}
-.brand-icon svg{width:28px;height:28px;stroke:#fff;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.brand-icon img{width:100%;height:100%;object-fit:cover;display:block}
 h1.title{position:relative;z-index:2;font-size:32px;font-weight:800;text-align:center;letter-spacing:3px;
   margin-bottom:7px;text-shadow:0 6px 24px rgba(0,20,80,.4)}
 .subtitle{position:relative;z-index:2;text-align:center;font-size:11.5px;letter-spacing:2.6px;text-transform:uppercase;
@@ -172,7 +172,7 @@ body.dark-mode{
     <div class="deco-bubble" style="width:22px;height:22px;bottom:22px;left:-10px"></div>
 
     <div class="brand-icon">
-      <svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+      <img src="assets/img/logo.jpg" alt="School Logo">
     </div>
 
     <h1 class="title">LOGIN FORM</h1>
