@@ -39,7 +39,7 @@ body{
 .scene{position:relative;z-index:10;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:40px 16px}
 .card{width:430px;max-width:100%;position:relative;overflow:hidden;
   background:linear-gradient(165deg, rgba(255,255,255,.24), rgba(255,255,255,.07));
-  backdrop-filter:blur(28px);-webkit-backdrop-filter:blur(28px);
+  -webkit-backdrop-filter:blur(28px);backdrop-filter:blur(28px);
   border:1px solid var(--glass-brd);border-radius:30px;
   padding:46px 42px 40px;
   box-shadow:0 35px 90px rgba(2,16,60,.45), inset 0 1px 0 rgba(255,255,255,.55);
@@ -97,8 +97,8 @@ input:focus{background:rgba(255,255,255,.2);border-color:#fff;box-shadow:0 0 0 4
 .demo-hint{position:relative;z-index:2;text-align:center;font-size:11px;color:var(--dim2);margin-top:16px;line-height:1.6}
 @media (max-height:740px){.scene{align-items:flex-start}.card{margin-top:24px}}
 .theme-toggle{position:fixed;top:22px;right:22px;z-index:50;width:46px;height:46px;border-radius:50%;
-  background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.42);backdrop-filter:blur(14px);
-  -webkit-backdrop-filter:blur(14px);display:flex;align-items:center;justify-content:center;cursor:pointer;
+  background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.42);-webkit-backdrop-filter:blur(14px);
+  backdrop-filter:blur(14px);display:flex;align-items:center;justify-content:center;cursor:pointer;
   box-shadow:0 10px 26px rgba(2,20,70,.28);transition:.2s}
 .theme-toggle:hover{transform:translateY(-2px) scale(1.05);background:rgba(255,255,255,.24)}
 .theme-toggle svg{width:20px;height:20px;stroke:#fff;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
@@ -208,7 +208,7 @@ body.dark-mode{
 
     <button type="button" class="forgot" onclick="alert('Please contact an admin to reset your password.')">Forgot Password?</button>
     <div class="foot">Don't have an account? <a href="register.html">Sign Up</a></div>
-    <div class="demo-hint">wellcome to my website &nbsp;·&nbsp; </div>
+    <div class="demo-hint">Demo logins — admin / admin123 &nbsp;·&nbsp; juan / juan123</div>
   </div>
 </div>
 
