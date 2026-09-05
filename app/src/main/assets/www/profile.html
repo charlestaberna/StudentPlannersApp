@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>My Profile — Student Planner</title>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/style.css">
 <style>
 .profile-av-wrap{width:110px;height:110px;border-radius:50%;overflow:hidden}
@@ -13,10 +14,6 @@
 </style>
 </head>
 <body>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="assets/js/firebase-config.js"></script>
 <script src="assets/js/app.js"></script>
 <script>
 SP.initPage({ activeNav:'profile', title:'My Profile', sub:'This picture follows your account everywhere — sidebar, chat, and more.' }, (root, ctx) => {
@@ -65,44 +62,34 @@ SP.initPage({ activeNav:'profile', title:'My Profile', sub:'This picture follows
         </div>
       </div>`;
 
-    document.getElementById('avatarInput').addEventListener('change', async function(){
+    document.getElementById('avatarInput').addEventListener('change', function(){
       const f = this.files[0];
       if (!f) return;
-      if (f.size > 10*1024*1024) { SP.toast('Image is too big. Max size is 10MB.', 'err'); this.value=''; return; }
-      try {
-        // Compress/resize before storing — the picture lives in the shared
-        // cloud database now, so it follows your account on every device
-        // and survives refresh/back automatically.
-        pendingAvatar = await ctx.resizeImageFile(f, 480, 0.75);
-        document.getElementById('avatarFileName').textContent = f.name;
-        document.getElementById('avatarSaveBtn').style.display = 'inline-flex';
-      } catch (err) {
-        console.error(err);
-        SP.toast('Could not read that image.', 'err');
-      }
+      if (f.size > 3*1024*1024) { SP.toast('Image is too big. Max size is 3MB.', 'err'); this.value=''; return; }
+      const reader = new FileReader();
+      reader.onload = () => { pendingAvatar = reader.result; document.getElementById('avatarFileName').textContent = f.name; document.getElementById('avatarSaveBtn').style.display = 'inline-flex'; };
+      reader.readAsDataURL(f);
     });
-    document.getElementById('avatarSaveBtn').addEventListener('click', async () => {
+    document.getElementById('avatarSaveBtn').addEventListener('click', () => {
       if (!pendingAvatar) return;
-      user.avatar = pendingAvatar;
-      await save(db);
-      SP.toast('Profile picture updated.'); render();
+      user.avatar = pendingAvatar; save(db); SP.toast('Profile picture updated.'); render();
     });
     const removeBtn = document.getElementById('avatarRemoveBtn');
-    if (removeBtn) removeBtn.addEventListener('click', async () => {
+    if (removeBtn) removeBtn.addEventListener('click', () => {
       if (!confirm('Remove your profile picture?')) return;
-      user.avatar = null; await save(db); SP.toast('Profile picture removed.'); render();
+      user.avatar = null; save(db); SP.toast('Profile picture removed.'); render();
     });
-    document.getElementById('detailsForm').addEventListener('submit', async e => {
+    document.getElementById('detailsForm').addEventListener('submit', e => {
       e.preventDefault();
       const name = document.getElementById('fName').value.trim();
       if (!name) return;
-      user.name = name; await save(db); SP.toast('Details updated.'); render();
+      user.name = name; save(db); SP.toast('Details updated.'); render();
     });
-    document.getElementById('pwForm').addEventListener('submit', async e => {
+    document.getElementById('pwForm').addEventListener('submit', e => {
       e.preventDefault();
       const pw = document.getElementById('fPassword').value.trim();
       if (!pw) { SP.toast('Enter a new password first.', 'err'); return; }
-      user.password = pw; await save(db); SP.toast('Password updated.'); document.getElementById('fPassword').value='';
+      user.password = pw; save(db); SP.toast('Password updated.'); document.getElementById('fPassword').value='';
     });
   }
   render();
