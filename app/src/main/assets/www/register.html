@@ -160,8 +160,9 @@ body.dark-mode{
         <select id="role">
           <option value="student">Student</option>
           <option value="faculty">Faculty</option>
+          <option value="admin">Admin</option>
         </select>
-        <div class="hint">The very first account ever registered on this device is auto-approved as admin. Everyone else needs approval from an admin before they can sign in.</div>
+        <div class="hint">The very first account ever created for this school is auto-approved as admin. Everyone else — including anyone requesting Admin — needs approval from an existing real admin (via Manage Accounts) before they can sign in.</div>
       </div>
       <button class="btn" type="submit">
         Create Account
@@ -173,11 +174,15 @@ body.dark-mode{
   </div>
 </div>
 
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="assets/js/firebase-config.js"></script>
 <script src="assets/js/app.js"></script>
 <script>
-if (SP.currentUser()) location.href = 'index.html';
+SP.currentUser().then(u => { if (u) location.href = 'index.html'; }).catch(()=>{});
 const alertBox = document.getElementById('alertBox');
-document.getElementById('regForm').addEventListener('submit', function(e){
+document.getElementById('regForm').addEventListener('submit', async function(e){
   e.preventDefault();
   const name = document.getElementById('name').value.trim();
   const username = document.getElementById('username').value.trim();
@@ -187,12 +192,21 @@ document.getElementById('regForm').addEventListener('submit', function(e){
     alertBox.innerHTML = '<div class="alert"><div class="alert-dot">!</div><span>Please fill in all fields.</span></div>';
     return;
   }
-  const res = SP.register({ name, username, password, role });
-  if (!res.ok) {
-    alertBox.innerHTML = `<div class="alert"><div class="alert-dot">!</div><span>${res.msg}</span></div>`;
-    return;
+  const btn = e.target.querySelector('button[type="submit"]');
+  if (btn) btn.disabled = true;
+  try {
+    const res = await SP.register({ name, username, password, role });
+    if (!res.ok) {
+      alertBox.innerHTML = `<div class="alert"><div class="alert-dot">!</div><span>${res.msg}</span></div>`;
+      if (btn) btn.disabled = false;
+      return;
+    }
+    location.href = 'login.html?registered=1' + (res.autoApproved ? '' : '&pending=1&role=' + encodeURIComponent(res.role));
+  } catch (err) {
+    console.error(err);
+    alertBox.innerHTML = '<div class="alert"><div class="alert-dot">!</div><span>Could not connect to the cloud database. Check your internet connection.</span></div>';
+    if (btn) btn.disabled = false;
   }
-  location.href = 'login.html?registered=1' + (res.autoApproved ? '' : '&pending=1');
 });
 
 const field = document.getElementById('bubbleField');
