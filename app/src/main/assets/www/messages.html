@@ -4,28 +4,20 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Group Messages — Student Planner</title>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/style.css">
 </head>
 <body>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="assets/js/firebase-config.js"></script>
 <script src="assets/js/app.js"></script>
 <script>
 SP.initPage({ activeNav:'chat', title:'Group Messages', sub:'One shared chat for everyone, plus any private groups you create.' }, (root, ctx) => {
-  const { db, save, user: me, canSeePresence, isOnline } = ctx;
+  const { db, save, user: me } = ctx;
   let activeGroup = null; // null = the shared "General" chat
   let pendingImage = null;
 
   function userById(id){ return db.users.find(u=>u.id===id); }
   function groupMembers(g){ return g.member_ids || []; }
   function myGroups(){ return db.groups.filter(g => groupMembers(g).includes(me.id)); }
-  function presenceDot(u){
-    if (!canSeePresence) return '';
-    const on = isOnline(u);
-    return `<span class="presence-dot" title="${on?'Online':'Offline'}" style="position:absolute;width:9px;height:9px;border-radius:50%;border:2px solid var(--card,#0d1b3d);background:${on?'#2ecf7a':'#5a6c8f'}"></span>`;
-  }
 
   function openNewGroupModal() {
     const others = db.users.filter(u => u.id !== me.id);
@@ -118,35 +110,30 @@ SP.initPage({ activeNav:'chat', title:'Group Messages', sub:'One shared chat for
     });
 
     document.getElementById('attachBtn').addEventListener('click', () => document.getElementById('imgInput').click());
-    document.getElementById('imgInput').addEventListener('change', async function(){
+    document.getElementById('imgInput').addEventListener('change', function(){
       const f = this.files[0]; if (!f) return;
-      try {
-        pendingImage = await ctx.resizeImageFile(f, 900, 0.75);
+      const reader = new FileReader();
+      reader.onload = () => {
+        pendingImage = reader.result;
         const prev = document.getElementById('attachPreview');
         prev.classList.add('show'); prev.querySelector('.name').textContent = f.name;
-      } catch (err) {
-        console.error(err);
-        SP.toast('Could not read that image.', 'err');
-      }
+      };
+      reader.readAsDataURL(f);
     });
     document.getElementById('attachClear').addEventListener('click', () => { pendingImage = null; document.getElementById('attachPreview').classList.remove('show'); document.getElementById('imgInput').value=''; });
 
-    async function send() {
+    function send() {
       const input = document.getElementById('msgInput');
       const body = input.value.trim();
       if (!body && !pendingImage) return;
-      const msg = {
+      db.messages.push({
         id: ctx.nextId(db,'messages'), user_id: me.id, group_id: activeGroup,
         body, image: pendingImage, created_at: new Date().toISOString(), hidden_for: []
-      };
+      });
       pendingImage = null;
       document.getElementById('attachPreview').classList.remove('show');
       input.value = '';
-      // Save the id counter, then push the message itself with arrayUnion
-      // so two people sending at the same moment don't overwrite each other.
-      await save(db);
-      await ctx.pushMessage(msg);
-      renderMessages();
+      save(db); renderMessages();
     }
     document.getElementById('sendBtn').addEventListener('click', send);
     document.getElementById('msgInput').addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
@@ -154,7 +141,6 @@ SP.initPage({ activeNav:'chat', title:'Group Messages', sub:'One shared chat for
 
   function renderMessages() {
     const box = document.getElementById('chatMessages');
-    const wasNearBottom = (box.scrollHeight - box.scrollTop - box.clientHeight) < 80;
     const msgs = visibleMessages().sort((a,b) => a.created_at.localeCompare(b.created_at));
     box.innerHTML = msgs.length === 0 ? `<div class="empty-state"><div class="empty-title">No messages yet</div><div class="empty-sub">Say hello 👋</div></div>` :
       msgs.map(m => {
@@ -163,7 +149,7 @@ SP.initPage({ activeNav:'chat', title:'Group Messages', sub:'One shared chat for
         const time = new Date(m.created_at).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
         return `
         <div class="msg-row ${mine?'me':'them'}">
-          <span style="position:relative;display:inline-block">${SP.avatarHtml(u,'msg-avatar')}${presenceDot(u)}</span>
+          ${SP.avatarHtml(u,'msg-avatar')}
           <div class="msg-col">
             ${!mine ? `<div class="msg-name">${SP.h(u.name)} <span class="badge role-${u.role} msg-badge">${u.role}</span></div>` : ''}
             <div class="msg-bubble">
@@ -177,32 +163,19 @@ SP.initPage({ activeNav:'chat', title:'Group Messages', sub:'One shared chat for
           </div>
         </div>`;
       }).join('');
-    if (wasNearBottom) box.scrollTop = box.scrollHeight;
+    box.scrollTop = box.scrollHeight;
 
-    box.querySelectorAll('[data-unsend]').forEach(b => b.addEventListener('click', async () => {
+    box.querySelectorAll('[data-unsend]').forEach(b => b.addEventListener('click', () => {
       db.messages = db.messages.filter(m=>m.id!==parseInt(b.dataset.unsend,10));
-      await save(db); renderMessages();
+      save(db); renderMessages();
     }));
-    box.querySelectorAll('[data-hide]').forEach(b => b.addEventListener('click', async () => {
+    box.querySelectorAll('[data-hide]').forEach(b => b.addEventListener('click', () => {
       const m = db.messages.find(m=>m.id===parseInt(b.dataset.hide,10));
       m.hidden_for = m.hidden_for || []; m.hidden_for.push(me.id);
-      await save(db); renderMessages();
+      save(db); renderMessages();
     }));
   }
-
   render();
-
-  // Lightly poll for new messages from other people so the chat feels
-  // live without needing a full page refresh. Doesn't touch the input
-  // box, so typing is never interrupted.
-  const pollInterval = setInterval(async () => {
-    try {
-      const before = JSON.stringify(db.messages);
-      await ctx.refreshMessages();
-      if (JSON.stringify(db.messages) !== before) renderMessages();
-    } catch (e) { /* offline — ignore, will retry */ }
-  }, 4000);
-  window.addEventListener('beforeunload', () => clearInterval(pollInterval));
 });
 </script>
 </body>
