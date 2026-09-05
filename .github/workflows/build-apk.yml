@@ -1,5 +1,7 @@
 name: Build Android APK
 
+# Runs automatically every time you push to GitHub, and also gives you
+# a manual "Run workflow" button in the Actions tab.
 on:
   push:
     branches: [ main, master ]
