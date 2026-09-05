@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Manage Accounts — Student Planner</title>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<script src="assets/js/app.js"></script>
+<script>
+SP.initPage({ activeNav:'accounts', title:'Manage Accounts', sub:'Approve sign-ups, change roles, and manage every account.', adminOnly:true }, (root, ctx) => {
+  const { db, save, user: me } = ctx;
+
+  function render() {
+    const list = db.users.slice().sort((a,b) => (a.is_approved - b.is_approved) || a.name.localeCompare(b.name));
+    root.innerHTML = `
+      <div class="section-head">
+        <div><div class="section-eyebrow">All Accounts</div><div class="section-title">${list.length} Account${list.length===1?'':'s'}</div></div>
+      </div>
+      <div class="card">
+        <div class="table-wrap">
+        <table>
+          <thead><tr><th>User</th><th>Username</th><th>Role</th><th>Status</th><th>Joined</th><th></th></tr></thead>
+          <tbody>
+          ${list.map(u => `
+            <tr>
+              <td><div class="flex items-center gap-10">${SP.avatarHtml(u,'sb-user-av')}<div style="font-weight:600">${SP.h(u.name)}</div></div></td>
+              <td>${SP.h(u.username)}</td>
+              <td>
+                ${u.id === me.id ? `<span class="badge role-${u.role}">${u.role}</span>` : `
+                <select data-role="${u.id}" style="width:120px;padding:6px 10px;font-size:12px">
+                  ${['student','faculty','admin'].map(r=>`<option value="${r}" ${u.role===r?'selected':''}>${r}</option>`).join('')}
+                </select>`}
+              </td>
+              <td>${u.is_approved ? '<span class="badge st-completed">Approved</span>' : '<span class="badge st-pending">Pending</span>'}</td>
+              <td style="color:var(--muted);font-size:12px">${SP.fmtDate(u.created_at)}</td>
+              <td>
+                <div class="flex gap-8">
+                  ${!u.is_approved ? `<button class="btn btn-primary btn-sm" data-approve="${u.id}">Approve</button>` : (u.id!==me.id ? `<button class="btn btn-outline btn-sm" data-pause="${u.id}">Pause</button>` : '')}
+                  ${u.id !== me.id ? `<button class="btn btn-danger btn-sm" data-del="${u.id}">Delete</button>` : `<span style="font-size:11px;color:var(--muted2)">You</span>`}
+                </div>
+              </td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+        </div>
+      </div>`;
+
+    root.querySelectorAll('[data-role]').forEach(sel => sel.addEventListener('change', () => {
+      const u = db.users.find(u=>u.id===parseInt(sel.dataset.role,10));
+      u.role = sel.value; save(db); SP.toast('Role updated.'); render();
+    }));
+    root.querySelectorAll('[data-approve]').forEach(b => b.addEventListener('click', () => {
+      const u = db.users.find(u=>u.id===parseInt(b.dataset.approve,10));
+      u.is_approved = 1; save(db); SP.toast('Account approved.'); render();
+    }));
+    root.querySelectorAll('[data-pause]').forEach(b => b.addEventListener('click', () => {
+      const u = db.users.find(u=>u.id===parseInt(b.dataset.pause,10));
+      u.is_approved = 0; save(db); SP.toast('Account paused.'); render();
+    }));
+    root.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => {
+      if (!confirm('Delete this account? This cannot be undone.')) return;
+      const id = parseInt(b.dataset.del,10);
+      db.users = db.users.filter(u=>u.id!==id);
+      save(db); SP.toast('Account deleted.'); render();
+    }));
+  }
+  render();
+});
+</script>
+</body>
+</html>

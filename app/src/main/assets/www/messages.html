@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Group Messages — Student Planner</title>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<script src="assets/js/app.js"></script>
+<script>
+SP.initPage({ activeNav:'chat', title:'Group Messages', sub:'One shared chat for everyone, plus any private groups you create.' }, (root, ctx) => {
+  const { db, save, user: me } = ctx;
+  let activeGroup = null; // null = the shared "General" chat
+  let pendingImage = null;
+
+  function userById(id){ return db.users.find(u=>u.id===id); }
+  function groupMembers(g){ return g.member_ids || []; }
+  function myGroups(){ return db.groups.filter(g => groupMembers(g).includes(me.id)); }
+
+  function openNewGroupModal() {
+    const others = db.users.filter(u => u.id !== me.id);
+    document.body.insertAdjacentHTML('beforeend', `
+    <div class="modal-bg show" id="grpModal">
+      <div class="modal">
+        <div class="modal-head"><div class="modal-title">New Group</div><button class="modal-close" onclick="document.getElementById('grpModal').remove()">✕</button></div>
+        <form id="grpForm">
+          <div class="form-row"><div><label>Group Name</label><input type="text" id="fGName" required></div></div>
+          <div class="form-row"><div><label>Members</label>
+            <div class="member-pick-list">
+              ${others.length===0 ? '<div style="padding:10px;color:var(--muted2);font-size:12px">No other accounts yet.</div>' : others.map(u => `
+                <label class="member-pick-row"><input type="checkbox" value="${u.id}"> ${SP.h(u.name)} <span class="member-pick-role">(${u.role})</span></label>
+              `).join('')}
+            </div>
+          </div></div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-ghost" onclick="document.getElementById('grpModal').remove()">Cancel</button>
+            <button type="submit" class="btn btn-primary">Create Group</button>
+          </div>
+        </form>
+      </div>
+    </div>`);
+    document.getElementById('grpForm').addEventListener('submit', e => {
+      e.preventDefault();
+      const name = document.getElementById('fGName').value.trim();
+      if (!name) return;
+      const checked = Array.from(document.querySelectorAll('#grpModal input[type=checkbox]:checked')).map(c=>parseInt(c.value,10));
+      const id = ctx.nextId(db,'groups');
+      db.groups.push({ id, name, logo:null, created_by: me.id, member_ids: [me.id, ...checked] });
+      save(db); document.getElementById('grpModal').remove(); activeGroup = id; SP.toast('Group created.'); render();
+    });
+  }
+
+  function visibleMessages() {
+    return db.messages.filter(m => (m.group_id||null) === activeGroup && !(m.hidden_for||[]).includes(me.id));
+  }
+
+  function render() {
+    const groups = myGroups();
+    root.innerHTML = `
+      <div class="card chat-wrap">
+        <div class="chat-tabs" style="padding:14px 22px 0">
+          <div class="chat-tab ${activeGroup===null?'active':''}" data-tab="general">
+            <div class="chat-tab-av chat-tab-av-general">🏫</div> General
+          </div>
+          ${groups.map(g => `
+            <div class="chat-tab ${activeGroup===g.id?'active':''}" data-tab="${g.id}">
+              <div class="chat-tab-av">${g.logo?`<img src="${g.logo}" style="width:100%;height:100%;object-fit:cover">`:SP.h(SP.initials(g.name))}</div>
+              ${SP.h(g.name)} ${g.created_by===me.id?'<span class="chat-tab-owner">★</span>':''}
+            </div>`).join('')}
+          <div class="chat-tab chat-tab-new" id="newGroupTab">+ New Group</div>
+        </div>
+        <div class="chat-head">
+          <div class="flex items-center gap-10">
+            <div class="chat-head-av">${activeGroup===null?'🏫':SP.h(SP.initials((db.groups.find(g=>g.id===activeGroup)||{name:'?'}).name))}</div>
+            <div>
+              <div style="font-weight:700;font-size:14px">${activeGroup===null?'General (everyone)':SP.h(db.groups.find(g=>g.id===activeGroup).name)}</div>
+              <div style="font-size:11px;color:var(--muted)">${activeGroup===null?db.users.length+' members':groupMembers(db.groups.find(g=>g.id===activeGroup)).length+' members'}</div>
+            </div>
+          </div>
+          ${activeGroup!==null && db.groups.find(g=>g.id===activeGroup).created_by===me.id ? `<button class="btn btn-danger btn-sm" id="delGroupBtn">Delete Group</button>` : ''}
+        </div>
+        <div class="chat-messages" id="chatMessages"></div>
+        <div class="chat-attach-preview" id="attachPreview"><span class="name"></span><button id="attachClear">✕</button></div>
+        <div class="chat-input-row">
+          <button class="chat-attach-btn" id="attachBtn" title="Attach image">
+            <svg viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+          </button>
+          <input type="file" id="imgInput" accept="image/*" style="display:none">
+          <input type="text" id="msgInput" placeholder="Type a message…">
+          <button class="btn btn-primary" id="sendBtn">Send</button>
+        </div>
+      </div>`;
+
+    renderMessages();
+
+    root.querySelectorAll('[data-tab]').forEach(tab => tab.addEventListener('click', () => {
+      activeGroup = tab.dataset.tab === 'general' ? null : parseInt(tab.dataset.tab,10);
+      render();
+    }));
+    document.getElementById('newGroupTab').addEventListener('click', openNewGroupModal);
+    const delBtn = document.getElementById('delGroupBtn');
+    if (delBtn) delBtn.addEventListener('click', () => {
+      if (!confirm('Delete this group for everyone?')) return;
+      const id = activeGroup;
+      db.groups = db.groups.filter(g=>g.id!==id);
+      db.messages = db.messages.filter(m=>m.group_id!==id);
+      activeGroup = null; save(db); render();
+    });
+
+    document.getElementById('attachBtn').addEventListener('click', () => document.getElementById('imgInput').click());
+    document.getElementById('imgInput').addEventListener('change', function(){
+      const f = this.files[0]; if (!f) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        pendingImage = reader.result;
+        const prev = document.getElementById('attachPreview');
+        prev.classList.add('show'); prev.querySelector('.name').textContent = f.name;
+      };
+      reader.readAsDataURL(f);
+    });
+    document.getElementById('attachClear').addEventListener('click', () => { pendingImage = null; document.getElementById('attachPreview').classList.remove('show'); document.getElementById('imgInput').value=''; });
+
+    function send() {
+      const input = document.getElementById('msgInput');
+      const body = input.value.trim();
+      if (!body && !pendingImage) return;
+      db.messages.push({
+        id: ctx.nextId(db,'messages'), user_id: me.id, group_id: activeGroup,
+        body, image: pendingImage, created_at: new Date().toISOString(), hidden_for: []
+      });
+      pendingImage = null;
+      document.getElementById('attachPreview').classList.remove('show');
+      input.value = '';
+      save(db); renderMessages();
+    }
+    document.getElementById('sendBtn').addEventListener('click', send);
+    document.getElementById('msgInput').addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
+  }
+
+  function renderMessages() {
+    const box = document.getElementById('chatMessages');
+    const msgs = visibleMessages().sort((a,b) => a.created_at.localeCompare(b.created_at));
+    box.innerHTML = msgs.length === 0 ? `<div class="empty-state"><div class="empty-title">No messages yet</div><div class="empty-sub">Say hello 👋</div></div>` :
+      msgs.map(m => {
+        const u = userById(m.user_id) || { name:'Unknown', role:'student' };
+        const mine = m.user_id === me.id;
+        const time = new Date(m.created_at).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+        return `
+        <div class="msg-row ${mine?'me':'them'}">
+          ${SP.avatarHtml(u,'msg-avatar')}
+          <div class="msg-col">
+            ${!mine ? `<div class="msg-name">${SP.h(u.name)} <span class="badge role-${u.role} msg-badge">${u.role}</span></div>` : ''}
+            <div class="msg-bubble">
+              ${m.body ? SP.h(m.body) : ''}
+              ${m.image ? `<img src="${m.image}" class="msg-image">` : ''}
+            </div>
+            <div class="msg-time">
+              ${time}
+              ${mine ? `<button class="msg-del" data-unsend="${m.id}">Unsend</button>` : `<button class="msg-hide" data-hide="${m.id}">Hide</button>`}
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+    box.scrollTop = box.scrollHeight;
+
+    box.querySelectorAll('[data-unsend]').forEach(b => b.addEventListener('click', () => {
+      db.messages = db.messages.filter(m=>m.id!==parseInt(b.dataset.unsend,10));
+      save(db); renderMessages();
+    }));
+    box.querySelectorAll('[data-hide]').forEach(b => b.addEventListener('click', () => {
+      const m = db.messages.find(m=>m.id===parseInt(b.dataset.hide,10));
+      m.hidden_for = m.hidden_for || []; m.hidden_for.push(me.id);
+      save(db); renderMessages();
+    }));
+  }
+  render();
+});
+</script>
+</body>
+</html>
