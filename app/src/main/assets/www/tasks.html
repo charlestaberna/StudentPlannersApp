@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tasks — Student Planner</title>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<script src="assets/js/app.js"></script>
+<script>
+SP.initPage({ activeNav:'tasks', title:'Tasks', sub:'Your assignments, homework and to-dos.' }, (root, ctx) => {
+  const { db, save, canManage } = ctx;
+  let filterStatus = 'all', filterSubject = 'all';
+
+  const subjName = id => { const s = db.subjects.find(s=>s.id===id); return s ? s.subject_name : ''; };
+
+  function subjectOptions(selected) {
+    return `<option value="">No subject</option>` + db.subjects.map(s =>
+      `<option value="${s.id}" ${selected==s.id?'selected':''}>${SP.h(s.subject_name)}</option>`).join('');
+  }
+
+  function openForm(task) {
+    const editing = !!task;
+    document.body.insertAdjacentHTML('beforeend', `
+    <div class="modal-bg show" id="taskModal">
+      <div class="modal">
+        <div class="modal-head"><div class="modal-title">${editing?'Edit Task':'Add Task'}</div>
+          <button class="modal-close" onclick="document.getElementById('taskModal').remove()">✕</button></div>
+        <form id="taskForm">
+          <div class="form-row"><div><label>Title</label><input type="text" id="fTitle" value="${editing?SP.h(task.title):''}" required></div></div>
+          <div class="form-row"><div><label>Description</label><textarea id="fDesc">${editing?SP.h(task.description||''):''}</textarea></div></div>
+          <div class="form-row cols-2">
+            <div><label>Subject</label><select id="fSubject">${subjectOptions(editing?task.subject_id:'')}</select></div>
+            <div><label>Due Date</label><input type="date" id="fDue" value="${editing?(task.due_date||''):''}"></div>
+          </div>
+          <div class="form-row cols-2">
+            <div><label>Priority</label><select id="fPriority">
+              ${['low','medium','high'].map(p=>`<option value="${p}" ${editing&&task.priority===p?'selected':''}>${p}</option>`).join('')}
+            </select></div>
+            <div><label>Status</label><select id="fStatus">
+              ${['pending','in_progress','completed'].map(p=>`<option value="${p}" ${editing&&task.status===p?'selected':''}>${p.replace('_',' ')}</option>`).join('')}
+            </select></div>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-ghost" onclick="document.getElementById('taskModal').remove()">Cancel</button>
+            <button type="submit" class="btn btn-primary">${editing?'Save Changes':'Add Task'}</button>
+          </div>
+        </form>
+      </div>
+    </div>`);
+    document.getElementById('taskForm').addEventListener('submit', e => {
+      e.preventDefault();
+      const vals = {
+        title: document.getElementById('fTitle').value.trim(),
+        description: document.getElementById('fDesc').value.trim(),
+        subject_id: document.getElementById('fSubject').value ? parseInt(document.getElementById('fSubject').value,10) : null,
+        due_date: document.getElementById('fDue').value || null,
+        priority: document.getElementById('fPriority').value,
+        status: document.getElementById('fStatus').value
+      };
+      if (!vals.title) return;
+      if (editing) {
+        Object.assign(task, vals);
+        task.completed_at = vals.status === 'completed' ? (task.completed_at || new Date().toISOString()) : null;
+      } else {
+        const id = ctx.nextId(db,'tasks');
+        db.tasks.push({ id, user_id: ctx.user.id, completed_at: vals.status==='completed'?new Date().toISOString():null, ...vals });
+      }
+      save(db); document.getElementById('taskModal').remove(); SP.toast(editing?'Task updated.':'Task added.'); render();
+    });
+  }
+
+  function render() {
+    let list = db.tasks.slice();
+    if (filterStatus !== 'all') list = list.filter(t => t.status === filterStatus);
+    if (filterSubject !== 'all') list = list.filter(t => String(t.subject_id) === filterSubject);
+    list.sort((a,b) => (a.due_date||'9999') < (b.due_date||'9999') ? -1 : 1);
+
+    root.innerHTML = `
+      <div class="section-head">
+        <div><div class="section-eyebrow">Task List</div><div class="section-title">${list.length} Task${list.length===1?'':'s'}</div></div>
+        <div class="flex gap-8" style="flex-wrap:wrap">
+          <select id="fltStatus" style="width:150px">
+            <option value="all">All statuses</option>
+            <option value="pending">Pending</option>
+            <option value="in_progress">In progress</option>
+            <option value="completed">Completed</option>
+          </select>
+          <select id="fltSubject" style="width:170px">
+            <option value="all">All subjects</option>
+            ${db.subjects.map(s=>`<option value="${s.id}">${SP.h(s.subject_name)}</option>`).join('')}
+          </select>
+          ${canManage ? `<button class="btn btn-primary" id="addTaskBtn">+ Add Task</button>` : ''}
+        </div>
+      </div>
+      <div class="card">
+        <div class="table-wrap">
+        ${list.length===0 ? `<div class="empty-state"><div class="empty-title">No tasks found</div><div class="empty-sub">Try changing the filters${canManage?', or add a new task.':'.'}</div></div>` : `
+        <table>
+          <thead><tr><th>Task</th><th>Subject</th><th>Due</th><th>Priority</th><th>Status</th>${canManage?'<th></th>':''}</tr></thead>
+          <tbody>
+          ${list.map(t => `
+            <tr>
+              <td><div style="font-weight:600">${SP.h(t.title)}</div>${t.description?`<div style="font-size:11.5px;color:var(--muted);margin-top:2px">${SP.h(t.description)}</div>`:''}</td>
+              <td>${t.subject_id ? SP.h(subjName(t.subject_id)) : '<span style="color:var(--muted2)">—</span>'}</td>
+              <td>${t.due_date ? SP.fmtDate(t.due_date) : '<span style="color:var(--muted2)">—</span>'}</td>
+              <td><span class="badge pri-${t.priority}">${t.priority}</span></td>
+              <td><span class="badge st-${t.status}">${t.status.replace('_',' ')}</span></td>
+              ${canManage ? `<td>
+                <div class="flex gap-8">
+                  <button class="btn btn-outline btn-sm" data-toggle="${t.id}">${t.status==='completed'?'Reopen':'Complete'}</button>
+                  <button class="btn btn-ghost btn-sm" data-edit="${t.id}">Edit</button>
+                  <button class="btn btn-danger btn-sm" data-del="${t.id}">Delete</button>
+                </div></td>` : ''}
+            </tr>`).join('')}
+          </tbody>
+        </table>`}
+        </div>
+      </div>`;
+
+    document.getElementById('fltStatus').value = filterStatus;
+    document.getElementById('fltSubject').value = filterSubject;
+    document.getElementById('fltStatus').addEventListener('change', e => { filterStatus = e.target.value; render(); });
+    document.getElementById('fltSubject').addEventListener('change', e => { filterSubject = e.target.value; render(); });
+    if (canManage) {
+      document.getElementById('addTaskBtn').addEventListener('click', () => openForm(null));
+      root.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => openForm(db.tasks.find(t=>t.id===parseInt(b.dataset.edit,10)))));
+      root.querySelectorAll('[data-toggle]').forEach(b => b.addEventListener('click', () => {
+        const t = db.tasks.find(t=>t.id===parseInt(b.dataset.toggle,10));
+        t.status = t.status === 'completed' ? 'pending' : 'completed';
+        t.completed_at = t.status === 'completed' ? new Date().toISOString() : null;
+        save(db); render();
+      }));
+      root.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => {
+        if (!confirm('Delete this task?')) return;
+        db.tasks = db.tasks.filter(t=>t.id!==parseInt(b.dataset.del,10));
+        save(db); SP.toast('Task deleted.'); render();
+      }));
+    }
+  }
+  render();
+});
+</script>
+</body>
+</html>
