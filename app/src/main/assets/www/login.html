@@ -212,10 +212,14 @@ body.dark-mode{
   </div>
 </div>
 
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="assets/js/firebase-config.js"></script>
 <script src="assets/js/app.js"></script>
 <script>
 // if already logged in, skip straight to dashboard
-if (SP.currentUser()) location.href = 'index.html';
+SP.currentUser().then(u => { if (u) location.href = 'index.html'; }).catch(()=>{});
 
 const params = new URLSearchParams(location.search);
 const alertBox = document.getElementById('alertBox');
@@ -223,17 +227,26 @@ function showAlert(msg, kind){
   alertBox.innerHTML = `<div class="alert ${kind}"><div class="alert-dot">${kind==='ok'?'✓':'!'}</div><span>${msg}</span></div>`;
 }
 if (params.get('kicked')) showAlert('Your session has ended or your account was suspended. Please sign in again.', 'warn');
-if (params.get('registered') && params.get('pending')) showAlert('Account created! Your admin request is awaiting approval from an existing admin.', 'warn');
+if (params.get('registered') && params.get('pending') && params.get('role') === 'admin') showAlert('Account created! Your admin request is awaiting approval from an existing admin.', 'warn');
+else if (params.get('registered') && params.get('pending')) showAlert('Account created! Your account is awaiting admin approval.', 'warn');
 else if (params.get('registered')) showAlert('Account created! Please sign in to continue.', 'ok');
 
-document.getElementById('loginForm').addEventListener('submit', function(e){
+document.getElementById('loginForm').addEventListener('submit', async function(e){
   e.preventDefault();
   const username = document.getElementById('username').value.trim();
   const password = document.getElementById('password').value.trim();
   if (!username || !password) { showAlert('Please enter both username and password.', 'err'); return; }
-  const res = SP.login(username, password);
-  if (res.ok) location.href = 'index.html';
-  else showAlert(res.msg, 'err');
+  const btn = e.target.querySelector('button[type="submit"]');
+  if (btn) btn.disabled = true;
+  try {
+    const res = await SP.login(username, password);
+    if (res.ok) { location.href = 'index.html'; return; }
+    showAlert(res.msg, 'err');
+  } catch (err) {
+    console.error(err);
+    showAlert('Could not connect to the cloud database. Check your internet connection.', 'err');
+  }
+  if (btn) btn.disabled = false;
 });
 
 function tpw(){
