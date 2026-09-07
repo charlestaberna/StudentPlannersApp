@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Used on Android 12 (API 31) and above via android:dataExtractionRules
+  in AndroidManifest.xml. Same reasoning as backup_rules.xml (kept for
+  API 30 and below) — see the comments in that file.
+
+  <cloud-backup> covers the automatic Google account backup/restore
+  flow (what runs after an uninstall + reinstall). <device-transfer>
+  covers Android's "copy my data" flow when setting up a new phone.
+  Both are told to keep the WebView storage that holds every account
+  and all of that account's data.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <include domain="file" path="app_webview/" />
+        <include domain="sharedpref" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <include domain="file" path="app_webview/" />
+        <include domain="sharedpref" path="." />
+    </device-transfer>
+</data-extraction-rules>
