@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Used on Android 11 (API 30) and below via android:fullBackupContent
+  in AndroidManifest.xml.
+
+  WHY THIS FILE EXISTS:
+  This app's "database" (accounts, tasks, class schedule, subjects,
+  notes, calendar, messages — everything in assets/www/assets/js/app.js)
+  lives entirely inside the WebView's local storage, on disk under this
+  app's private "app_webview" folder. Android's Auto Backup for Apps
+  already backs up an app's private files to the signed-in Google
+  account by default, but we make it explicit here so it's never
+  accidentally left out: as long as the person has Android's own
+  backup turned on for their phone (Settings > Google > Backup), their
+  account and data are restored automatically the next time they
+  install this app — on the same phone after an uninstall, or on a new
+  phone signed into the same Google account — without needing to log
+  in with a brand-new account. The ONLY way that data goes away for
+  good is if the person deletes their account from inside the app
+  itself, or turns off/never enabled phone backup in Android's own
+  settings (that part is outside this app's control).
+
+  Explicitly including it here (instead of just relying on the
+  default) also protects this from being silently excluded later if a
+  future dependency happens to write into a "no backup" folder.
+-->
+<full-backup-content>
+    <include domain="file" path="app_webview/" />
+    <include domain="sharedpref" path="." />
+</full-backup-content>
