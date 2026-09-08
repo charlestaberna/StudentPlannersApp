@@ -533,7 +533,6 @@ const SP = (() => {
     { key:'notes', href:'notes.html', label:'Notes', icon:'<path d="M4 4h16v12H8l-4 4V4z"/>' },
     { key:'calendar', href:'calendar.html', label:'Calendar', icon:'<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><circle cx="8" cy="15" r="1"/><circle cx="12" cy="15" r="1"/><circle cx="16" cy="15" r="1"/>' },
     { key:'analytics', href:'analytics.html', label:'Analytics', icon:'<path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/>' },
-    { key:'chat', href:'messages.html', label:'Group Messages', icon:'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>' },
     { key:'profile', href:'profile.html', label:'My Profile', icon:'<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/>' }
   ];
 
